@@ -14,7 +14,8 @@
 set -Eeuo pipefail
 
 APP="Borgly Studio (Test)"
-VERSION="1.0.1"
+SCRIPT_URL="https://raw.githubusercontent.com/weiti000/BorglyStudioLXCScript/main/borgly-studio-lxc.sh"
+VERSION="1.0.4"
 
 # --- Ausgabe -----------------------------------------------------------------
 msg()  { echo -e "\e[1;36m▶\e[0m $*"; }
@@ -35,7 +36,7 @@ if [ "${1:-}" = "update" ]; then
   CTID="${2:-}"
   if [ -z "$CTID" ]; then
     CTID=$(pct list | awk 'NR>1 && $NF ~ /^borgly-studio/ {print $1; exit}')
-    [ -n "$CTID" ] || die "Kein Borgly-LXC gefunden. Nutzung: $0 update <CTID>"
+    [ -n "$CTID" ] || die "Kein Borgly-LXC gefunden. Bitte die Container-ID angeben: … update <CTID>"
   fi
   pct status "$CTID" | grep -q running || { msg "Starte LXC $CTID"; pct start "$CTID"; sleep 5; }
   msg "Update in LXC $CTID"
@@ -260,7 +261,12 @@ dc() {
   local f; f=$(compose_file) || die "Kein compose.yml in $APP_DIR."
   docker compose -f "$f" --project-directory "$APP_DIR" --env-file "$ENV_FILE" -p borgly-studio "$@"
 }
-github_ok() { ssh -o BatchMode=yes -o ConnectTimeout=10 -T git@github.com 2>&1 | grep -q "successfully authenticated"; }
+# ssh -T endet bei GitHub immer mit Exit 1 – daher Ausgabe erst sammeln (pipefail!)
+github_ok() {
+  local out
+  out=$(ssh -o BatchMode=yes -o ConnectTimeout=10 -T git@github.com 2>&1) || true
+  [[ $out == *"successfully authenticated"* ]]
+}
 
 cmd_key() {
   echo
@@ -397,9 +403,13 @@ echo "────────────────────────�
 echo "GitHub → Repo → Settings → Deploy keys → Add deploy key"
 echo "(Titel z. B. borgly-studio-test, Schreibzugriff NICHT aktivieren)"
 echo
-if whiptail --title "$APP" --yesno "Deploy-Key ist oben in der Konsole ausgegeben.\n\nIst er bei GitHub hinterlegt und das Repo schon angelegt?\n\nJa = jetzt klonen und starten\nNein = später im LXC: borgly deploy" 14 72; then
-  pct exec "$CTID" -- /usr/local/bin/borgly deploy || warn "Noch nicht geklont – später im LXC: borgly deploy"
-fi
+# Bewusst ohne whiptail, damit der Key sichtbar und kopierbar bleibt
+read -r -p "Key bei GitHub hinterlegt? Jetzt klonen und starten [J/n]: " ANSWER </dev/tty || ANSWER="n"
+case "${ANSWER,,}" in
+  ""|j|ja|y|yes)
+    pct exec "$CTID" -- /usr/local/bin/borgly deploy || warn "Noch nicht geklont – später: pct exec $CTID -- /usr/local/bin/borgly deploy" ;;
+  *) warn "Später klonen und starten: pct exec $CTID -- /usr/local/bin/borgly deploy" ;;
+esac
 
 # --- Abschluss ----------------------------------------------------------------------------
 echo
@@ -415,5 +425,6 @@ Nächste Schritte
 Bedienung
   LXC öffnen:        pct enter $CTID
   Update im LXC:     update
-  Update vom Host:   bash $0 update $CTID
+  Update vom Host:   bash -c "\$(curl -fsSL $SCRIPT_URL)" _ update $CTID
+  Deploy-Key:        pct exec $CTID -- /usr/local/bin/borgly key
 DONE
