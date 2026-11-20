@@ -15,7 +15,7 @@ set -Eeuo pipefail
 
 APP="Borgly Studio (Test)"
 SCRIPT_URL="https://raw.githubusercontent.com/weiti000/BorglyStudioLXCScript/main/borgly-studio-lxc.sh"
-VERSION="1.0.5"
+VERSION="1.0.6"
 
 # --- Ausgabe -----------------------------------------------------------------
 msg()  { echo -e "\e[1;36m▶\e[0m $*"; }
@@ -381,6 +381,7 @@ borgly – Borgly Studio Testumgebung
   borgly logs [dienst]           Protokolle verfolgen
   borgly backup                  Datenbank sichern ($BACKUP_DIR)
   borgly key                     Deploy-Key für GitHub anzeigen
+  borgly cli <befehl> …          Verwaltung: create-studio, add-staff, reset-password, reset-totp, list
 HELP
 }
 
@@ -391,6 +392,7 @@ case "${1:-help}" in
   logs)   shift; dc logs -f --tail=100 "$@" ;;
   backup) cmd_backup ;;
   key)    cmd_key ;;
+  cli)    shift; dc exec -T api node dist/src/cli.js "$@" ;;
   *)      cmd_help ;;
 esac
 BORGLY_TOOL
