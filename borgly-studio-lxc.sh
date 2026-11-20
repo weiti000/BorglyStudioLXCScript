@@ -15,7 +15,7 @@ set -Eeuo pipefail
 
 APP="Borgly Studio (Test)"
 SCRIPT_URL="https://raw.githubusercontent.com/weiti000/BorglyStudioLXCScript/main/borgly-studio-lxc.sh"
-VERSION="1.0.4"
+VERSION="1.0.5"
 
 # --- Ausgabe -----------------------------------------------------------------
 msg()  { echo -e "\e[1;36m▶\e[0m $*"; }
@@ -209,6 +209,16 @@ POSTGRES_PASSWORD=$(openssl rand -hex 24)
 SESSION_SECRET=$(openssl rand -hex 32)
 ENV
 fi
+
+echo "▶ Automatische Anmeldung an der Proxmox-Konsole (wie Community Scripts)"
+install -d /etc/systemd/system/container-getty@1.service.d
+cat > /etc/systemd/system/container-getty@1.service.d/override.conf <<'GETTY'
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin root --noclear --keep-baud tty%I 115200,38400,9600 $TERM
+GETTY
+systemctl daemon-reload
+systemctl restart container-getty@1.service || true
 
 install -d -m 755 "$BACKUP_DIR"
 printf '#!/usr/bin/env bash\nexec /usr/local/bin/borgly update "$@"\n' > /usr/local/bin/update
