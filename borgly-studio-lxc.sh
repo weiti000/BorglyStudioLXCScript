@@ -14,7 +14,7 @@
 set -Eeuo pipefail
 
 APP="Borgly Studio (Test)"
-VERSION="1.0.0"
+VERSION="1.0.1"
 
 # --- Ausgabe -----------------------------------------------------------------
 msg()  { echo -e "\e[1;36m▶\e[0m $*"; }
@@ -102,9 +102,11 @@ Jetzt anlegen?" 18 76 || exit 1
 # --- Vorlage ------------------------------------------------------------------------
 msg "Prüfe Debian-Vorlage"
 pveam update >/dev/null 2>&1 || warn "Vorlagenliste konnte nicht aktualisiert werden."
-TEMPLATE=$(pveam available --section system | awk '/debian-13-standard/ {print $2}' | sort -V | tail -1)
-[ -n "$TEMPLATE" ] || TEMPLATE=$(pveam available --section system | awk '/debian-12-standard/ {print $2}' | sort -V | tail -1)
-[ -n "$TEMPLATE" ] || die "Keine Debian-Vorlage gefunden."
+ARCH=$(dpkg --print-architecture)   # amd64 / arm64 – Vorlage muss zum Host passen
+pick_template() { pveam available --section system | awk -v re="^$1_.*_${ARCH}[.]tar" '$2 ~ re {print $2}' | sort -V | tail -1; }
+TEMPLATE=$(pick_template debian-13-standard)
+[ -n "$TEMPLATE" ] || TEMPLATE=$(pick_template debian-12-standard)
+[ -n "$TEMPLATE" ] || die "Keine Debian-Vorlage für $ARCH gefunden."
 if ! pveam list "$TSTORE" | grep -q "$TEMPLATE"; then
   msg "Lade $TEMPLATE"
   pveam download "$TSTORE" "$TEMPLATE" >/dev/null
@@ -128,7 +130,11 @@ Nur Testdaten. Update im LXC: \`update\`
 Adresse: $PUBURL")
 [ -n "$PW" ] && CREATE+=(--password "$PW")
 "${CREATE[@]}" >/dev/null
-pct start "$CTID"
+if ! pct start "$CTID"; then
+  warn "Start fehlgeschlagen – entferne den unvollständigen LXC $CTID."
+  pct destroy "$CTID" --purge >/dev/null 2>&1 || true
+  die "LXC konnte nicht gestartet werden (Details: journalctl -n 50)."
+fi
 ok "LXC $CTID gestartet"
 
 msg "Warte auf Netzwerk"
